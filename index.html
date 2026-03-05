@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Colour the Shapes!</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #1a1a2e;
+  background-image: radial-gradient(ellipse at 10% 0%, #2d1b69 0%, transparent 50%),
+                    radial-gradient(ellipse at 90% 100%, #0d3b60 0%, transparent 50%);
+  min-height: 100vh;
+  font-family: 'Nunito', sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 24px 16px 56px;
+}
+
+.header { text-align: center; margin-bottom: 4px; }
+.header h1 { font-family: 'Baloo 2', cursive; font-size: 2.4rem; font-weight: 800; color: #fff; line-height: 1; }
+.header h1 span { color: #ffd166; }
+.header p { color: #aaa8cc; font-size: 0.95rem; margin-top: 3px; }
+
+.set-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0 6px; }
+.set-label { font-family: 'Baloo 2', cursive; font-size: 1rem; color: #ccc8ff; }
+.set-dots { display: flex; gap: 7px; }
+.set-dot { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.2); transition: all 0.3s; }
+.set-dot.done    { background: #50c870; border-color: #50c870; }
+.set-dot.current { background: #ffd166; border-color: #ffd166; box-shadow: 0 0 8px #ffd16688; }
+
+.instructions { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; justify-content: center; max-width: 660px; width: 100%; }
+.instr-pill { display: flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 0.84rem; white-space: nowrap; }
+.instr-pill .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.pill-red   { background: rgba(220,60,60,0.18);  color: #ff9999; border: 1.5px solid rgba(220,60,60,0.45); }
+.pill-blue  { background: rgba(50,120,240,0.18); color: #88bbff; border: 1.5px solid rgba(50,120,240,0.45); }
+.pill-green { background: rgba(60,180,90,0.18);  color: #80e899; border: 1.5px solid rgba(60,180,90,0.45); }
+
+.toolbar {
+  background: rgba(255,255,255,0.06); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 18px;
+  padding: 12px 20px; display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap; justify-content: center; width: 100%; max-width: 660px; margin-bottom: 16px;
+}
+.toolbar-label { font-weight: 800; font-size: 0.84rem; color: #ccc8ff; text-transform: uppercase; letter-spacing: 1px; }
+.color-btns { display: flex; gap: 9px; align-items: center; }
+.color-btn {
+  display: flex; align-items: center; gap: 7px; padding: 8px 18px; border-radius: 999px;
+  font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 0.95rem;
+  border: 2.5px solid transparent; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+}
+.color-btn:hover { transform: scale(1.06); }
+.color-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 0 3px rgba(255,255,255,0.2); }
+.color-btn .btn-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.35); }
+.btn-red   { background: rgba(192,40,40,0.22);  color: #ffaaaa; }
+.btn-blue  { background: rgba(26,79,170,0.22);  color: #aaccff; }
+.btn-green { background: rgba(26,122,56,0.22);  color: #aaeebb; }
+.sep { width: 1px; height: 26px; background: rgba(255,255,255,0.12); }
+.eraser-btn {
+  background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 999px; padding: 7px 14px; font-family: 'Nunito', sans-serif;
+  font-weight: 700; font-size: 0.84rem; color: #bbb; cursor: pointer; transition: all 0.15s;
+}
+.eraser-btn:hover, .eraser-btn.active { background: rgba(255,80,80,0.15); border-color: rgba(255,80,80,0.5); color: #ff9999; }
+
+/* ── CANVAS ── */
+.canvas-wrap {
+  background: #f8f4ea; border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  padding: 16px; width: 100%; max-width: 660px;
+}
+
+/* The grid: 3 cols x 5 rows. Each cell 200x120px */
+.shape-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 200px);
+  grid-template-rows: repeat(5, 120px);
+  gap: 0;
+  width: 600px;
+  margin: 0 auto;
+}
+
+/* Each cell is a fixed 200x120 box — shape sits centred inside */
+.cell {
+  width: 200px; height: 120px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+
+/* ── SHAPE RENDERING ──
+   Each shape is a div with a specific clip-path or border-radius.
+   fill = background-color.
+   outline = border (only on visible edges).
+   Shapes are sized to comfortably fit inside 200x120 cell.
+*/
+
+.shape {
+  cursor: pointer;
+  background: #e8e4d0;
+  transition: background 0.2s, transform 0.15s;
+  position: relative;
+}
+.shape:hover { transform: scale(1.04); filter: brightness(1.06); }
+.shape.correct-flash { outline: 4px solid #22cc55 !important; }
+.shape.wrong-flash   { outline: 4px solid #ee2222 !important; }
+.shape.empty-flash   { outline: 4px solid #ff9f40 !important; }
+
+/* CIRCLE */
+.s-circle {
+  border-radius: 50%;
+  border: 3.5px solid #222;
+}
+
+/* HALF CIRCLE - dome up, flat bottom */
+.s-half-up {
+  border-radius: 100px 100px 0 0;
+  border: 3.5px solid #222;
+  border-bottom: none;
+  position: relative;
+}
+.s-half-up::after {
+  content: '';
+  position: absolute;
+  bottom: -3.5px; left: -3.5px; right: -3.5px;
+  height: 3.5px; background: #222;
+}
+
+/* HALF CIRCLE - dome down, flat top */
+.s-half-down {
+  border-radius: 0 0 100px 100px;
+  border: 3.5px solid #222;
+  border-top: none;
+  position: relative;
+}
+.s-half-down::after {
+  content: '';
+  position: absolute;
+  top: -3.5px; left: -3.5px; right: -3.5px;
+  height: 3.5px; background: #222;
+}
+
+/* HALF CIRCLE - dome right, flat left */
+.s-half-right {
+  border-radius: 0 100px 100px 0;
+  border: 3.5px solid #222;
+  border-left: none;
+  position: relative;
+}
+.s-half-right::after {
+  content: '';
+  position: absolute;
+  left: -3.5px; top: -3.5px; bottom: -3.5px;
+  width: 3.5px; background: #222;
+}
+
+/* HALF CIRCLE - dome left, flat right */
+.s-half-left {
+  border-radius: 100px 0 0 100px;
+  border: 3.5px solid #222;
+  border-right: none;
+  position: relative;
+}
+.s-half-left::after {
+  content: '';
+  position: absolute;
+  right: -3.5px; top: -3.5px; bottom: -3.5px;
+  width: 3.5px; background: #222;
+}
+
+/* QUARTER CIRCLES - use clip-path to cut a square into a quarter circle */
+/* BL: pivot bottom-left, arc to top-right */
+.s-quarter-bl {
+  border-radius: 0 100% 0 0;
+  border: 3.5px solid #222;
+  border-left: none; border-bottom: none;
+  position: relative;
+}
+.s-quarter-bl::before { content:''; position:absolute; left:-3.5px; top:-3.5px; bottom:-3.5px; width:3.5px; background:#222; }
+.s-quarter-bl::after  { content:''; position:absolute; bottom:-3.5px; left:-3.5px; right:-3.5px; height:3.5px; background:#222; }
+
+/* BR: pivot bottom-right, arc to top-left */
+.s-quarter-br {
+  border-radius: 100% 0 0 0;
+  border: 3.5px solid #222;
+  border-right: none; border-bottom: none;
+  position: relative;
+}
+.s-quarter-br::before { content:''; position:absolute; right:-3.5px; top:-3.5px; bottom:-3.5px; width:3.5px; background:#222; }
+.s-quarter-br::after  { content:''; position:absolute; bottom:-3.5px; left:-3.5px; right:-3.5px; height:3.5px; background:#222; }
+
+/* TL: pivot top-left, arc to bottom-right */
+.s-quarter-tl {
+  border-radius: 0 0 100% 0;
+  border: 3.5px solid #222;
+  border-left: none; border-top: none;
+  position: relative;
+}
+.s-quarter-tl::before { content:''; position:absolute; left:-3.5px; top:-3.5px; bottom:-3.5px; width:3.5px; background:#222; }
+.s-quarter-tl::after  { content:''; position:absolute; top:-3.5px; left:-3.5px; right:-3.5px; height:3.5px; background:#222; }
+
+/* TR: pivot top-right, arc to bottom-left */
+.s-quarter-tr {
+  border-radius: 0 0 0 100%;
+  border: 3.5px solid #222;
+  border-right: none; border-top: none;
+  position: relative;
+}
+.s-quarter-tr::before { content:''; position:absolute; right:-3.5px; top:-3.5px; bottom:-3.5px; width:3.5px; background:#222; }
+.s-quarter-tr::after  { content:''; position:absolute; top:-3.5px; left:-3.5px; right:-3.5px; height:3.5px; background:#222; }
+
+/* SIZE VARIANTS */
+.sz-lg  { width: 100px; height: 100px; }
+.sz-md  { width: 84px;  height: 84px;  }
+.sz-sm  { width: 68px;  height: 68px;  }
+.sz-xs  { width: 52px;  height: 52px;  }
+
+/* halves and quarters need non-square sizes */
+.s-half-up.sz-lg,   .s-half-down.sz-lg  { width: 100px; height: 50px; }
+.s-half-up.sz-md,   .s-half-down.sz-md  { width: 84px;  height: 42px; }
+.s-half-up.sz-sm,   .s-half-down.sz-sm  { width: 68px;  height: 34px; }
+.s-half-right.sz-lg,.s-half-left.sz-lg  { width: 50px;  height: 100px; }
+.s-half-right.sz-md,.s-half-left.sz-md  { width: 42px;  height: 84px; }
+.s-half-right.sz-sm,.s-half-left.sz-sm  { width: 34px;  height: 68px; }
+.s-quarter-bl.sz-lg,.s-quarter-br.sz-lg,.s-quarter-tl.sz-lg,.s-quarter-tr.sz-lg { width: 90px; height: 90px; }
+.s-quarter-bl.sz-md,.s-quarter-br.sz-md,.s-quarter-tl.sz-md,.s-quarter-tr.sz-md { width: 76px; height: 76px; }
+.s-quarter-bl.sz-sm,.s-quarter-br.sz-sm,.s-quarter-tl.sz-sm,.s-quarter-tr.sz-sm { width: 62px; height: 62px; }
+
+@keyframes pop { 0%{transform:scale(1)} 45%{transform:scale(1.07)} 100%{transform:scale(1)} }
+.pop-anim { animation: pop 0.2s ease; }
+
+/* BOTTOM */
+.bottom-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; max-width: 660px; margin-top: 14px; padding: 0 4px;
+  gap: 10px; flex-wrap: wrap;
+}
+.progress-wrap { display: flex; align-items: center; gap: 8px; }
+.progress-label { color: #aaa8cc; font-weight: 700; font-size: 0.84rem; }
+.progress-bar { width: 110px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg,#ffd166,#ff9f40); border-radius: 999px; width: 0%; transition: width 0.35s; }
+.progress-count { color: #ffd166; font-weight: 800; font-size: 0.84rem; }
+.action-btns { display: flex; gap: 8px; align-items: center; }
+.check-btn {
+  background: linear-gradient(135deg,#ffd166,#ff9f40); border: none; border-radius: 999px;
+  padding: 9px 22px; font-family: 'Baloo 2', cursive; font-weight: 700; font-size: 0.95rem;
+  color: #1a1a2e; cursor: pointer; transition: transform 0.15s; box-shadow: 0 4px 16px rgba(255,159,64,0.4);
+}
+.check-btn:hover { transform: scale(1.05); }
+.reset-btn {
+  background: none; border: 1.5px solid rgba(255,255,255,0.15); border-radius: 999px;
+  padding: 8px 18px; font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 0.84rem;
+  color: #888; cursor: pointer; transition: all 0.2s;
+}
+.reset-btn:hover { border-color: rgba(255,255,255,0.4); color: #ddd; }
+
+/* OVERLAYS */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); backdrop-filter: blur(5px); z-index: 100; flex-direction: column; align-items: center; justify-content: center; }
+.overlay.show { display: flex; }
+.result-box { background: #1c1c35; border-radius: 28px; padding: 38px 48px; text-align: center; box-shadow: 0 24px 80px rgba(0,0,0,0.7); max-width: 400px; width: 92%; }
+.result-box .big-emoji { font-size: 3.8rem; }
+.result-box h2 { font-family: 'Baloo 2', cursive; font-size: 1.9rem; margin: 8px 0 4px; }
+.result-box .score { font-family: 'Baloo 2', cursive; font-size: 2.6rem; font-weight: 800; margin: 8px 0; }
+.result-box p { color: #aaa8cc; font-size: 0.95rem; line-height: 1.5; }
+.overlay-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+.overlay-btn { border-radius: 999px; padding: 11px 28px; font-family: 'Baloo 2', cursive; font-size: 1rem; font-weight: 700; cursor: pointer; transition: transform 0.15s; border: none; }
+.overlay-btn:hover { transform: scale(1.05); }
+.btn-primary { background: linear-gradient(135deg,#ffd166,#ff9f40); color: #1a1a2e; }
+.btn-secondary { background: rgba(255,255,255,0.08); border: 1.5px solid rgba(255,255,255,0.2) !important; color: #ccc; }
+.all-done-box { background: #1c1c35; border: 2px solid rgba(255,209,102,0.5); border-radius: 28px; padding: 44px 52px; text-align: center; box-shadow: 0 24px 80px rgba(0,0,0,0.7); max-width: 440px; width: 92%; }
+.all-done-box h2 { font-family: 'Baloo 2', cursive; font-size: 2.2rem; color: #ffd166; margin: 10px 0 6px; }
+.all-done-box p { color: #aaa8cc; font-size: 1rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🖌️ Colour the <span>Shapes!</span></h1>
+  <p>Choose a colour and tap a shape to fill it in</p>
+</div>
+
+<div class="set-row">
+  <span class="set-label">Set</span>
+  <div class="set-dots" id="setDots"></div>
+</div>
+
+<div class="instructions">
+  <div class="instr-pill pill-red"><div class="dot" style="background:#e03030"></div> Circles = Red</div>
+  <div class="instr-pill pill-blue"><div class="dot" style="background:#2866e0"></div> Half Circles = Blue</div>
+  <div class="instr-pill pill-green"><div class="dot" style="background:#28a048"></div> Quarter Circles = Green</div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-label">Colour</span>
+  <div class="color-btns">
+    <button class="color-btn btn-red active" data-color="red" onclick="selectColor(this)">
+      <div class="btn-dot" style="background:#e03030"></div> Red
+    </button>
+    <button class="color-btn btn-blue" data-color="blue" onclick="selectColor(this)">
+      <div class="btn-dot" style="background:#2866e0"></div> Blue
+    </button>
+    <button class="color-btn btn-green" data-color="green" onclick="selectColor(this)">
+      <div class="btn-dot" style="background:#28a048"></div> Green
+    </button>
+  </div>
+  <div class="sep"></div>
+  <button class="eraser-btn" id="eraserBtn" onclick="toggleEraser()">🧹 Erase</button>
+</div>
+
+<div class="canvas-wrap">
+  <div class="shape-grid" id="shapeGrid"></div>
+</div>
+
+<div class="bottom-bar">
+  <div class="progress-wrap">
+    <span class="progress-label">Filled:</span>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-count" id="progressCount">0 / 15</span>
+  </div>
+  <div class="action-btns">
+    <button class="reset-btn" onclick="resetAll()">↺ Reset</button>
+    <button class="check-btn" onclick="checkAnswers()">Check Answers</button>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="result-box" id="resultBox">
+    <div class="big-emoji" id="resEmoji"></div>
+    <h2 id="resTitle"></h2>
+    <div class="score" id="resScore"></div>
+    <p id="resMsg"></p>
+    <div class="overlay-btns">
+      <button class="overlay-btn btn-primary" id="resPrimaryBtn" onclick="handlePrimary()"></button>
+      <button class="overlay-btn btn-secondary" onclick="closeResult()">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="allDoneOverlay">
+  <div class="all-done-box">
+    <div style="font-size:4rem">🏆</div>
+    <h2>All Sets Complete!</h2>
+    <div style="font-size:1.6rem;letter-spacing:4px;margin:6px 0">⭐⭐⭐⭐⭐</div>
+    <p id="allDoneMsg"></p>
+    <div style="margin-top:20px">
+      <button class="overlay-btn btn-primary" onclick="restartAll()">Play Again from Set 1</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── COLOURS ──────────────────────────────────────────────────
+const FILL_COLOR  = { red:'#e03030', blue:'#2866e0', green:'#28a048' };
+const CORRECT_FOR = { circle:'red', half:'blue', quarter:'green' };
+const EMPTY_BG    = '#e8e4d0';
+
+// ── SETS ─────────────────────────────────────────────────────
+// Each entry: { type, cls, size }
+// type: 'circle' | 'half' | 'quarter'
+// cls:  shape CSS class (s-circle, s-half-up, s-half-down, s-half-right, s-half-left,
+//                        s-quarter-bl, s-quarter-br, s-quarter-tl, s-quarter-tr)
+// size: 'sz-lg' | 'sz-md' | 'sz-sm' | 'sz-xs'  (circles only use sz-lg/md/sm/xs)
+// 15 shapes per set, laid out row by row (3 per row x 5 rows)
+
+const SETS = [
+  // SET 1
+  [
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'half',    cls:'s-half-up',     size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-lg'},
+
+    {type:'half',    cls:'s-half-right',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-lg'},
+
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-sm'},
+    {type:'half',    cls:'s-half-left',   size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-md'},
+    {type:'half',    cls:'s-half-down',   size:'sz-md'},
+
+    {type:'half',    cls:'s-half-up',     size:'sz-sm'},
+    {type:'circle',  cls:'s-circle',      size:'sz-xs'},
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-sm'},
+  ],
+  // SET 2
+  [
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'half',    cls:'s-half-down',   size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+    {type:'half',    cls:'s-half-up',     size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-lg'},
+
+    {type:'half',    cls:'s-half-left',   size:'sz-md'},
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-sm'},
+    {type:'half',    cls:'s-half-right',  size:'sz-md'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-xs'},
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-sm'},
+    {type:'half',    cls:'s-half-up',     size:'sz-sm'},
+  ],
+  // SET 3
+  [
+    {type:'half',    cls:'s-half-up',     size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+    {type:'half',    cls:'s-half-left',   size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-lg'},
+
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-md'},
+    {type:'circle',  cls:'s-circle',      size:'sz-sm'},
+    {type:'half',    cls:'s-half-down',   size:'sz-lg'},
+
+    {type:'half',    cls:'s-half-right',  size:'sz-md'},
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-md'},
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-xs'},
+    {type:'half',    cls:'s-half-up',     size:'sz-sm'},
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-sm'},
+  ],
+  // SET 4
+  [
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-lg'},
+    {type:'half',    cls:'s-half-right',  size:'sz-lg'},
+
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+    {type:'half',    cls:'s-half-up',     size:'sz-md'},
+
+    {type:'half',    cls:'s-half-down',   size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'half',    cls:'s-half-left',   size:'sz-md'},
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-md'},
+
+    {type:'half',    cls:'s-half-up',     size:'sz-sm'},
+    {type:'circle',  cls:'s-circle',      size:'sz-xs'},
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-sm'},
+  ],
+  // SET 5
+  [
+    {type:'half',    cls:'s-half-left',   size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-lg'},
+    {type:'quarter', cls:'s-quarter-bl',  size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-lg'},
+    {type:'half',    cls:'s-half-down',   size:'sz-lg'},
+
+    {type:'quarter', cls:'s-quarter-tl',  size:'sz-lg'},
+    {type:'half',    cls:'s-half-up',     size:'sz-lg'},
+    {type:'circle',  cls:'s-circle',      size:'sz-md'},
+
+    {type:'half',    cls:'s-half-right',  size:'sz-md'},
+    {type:'circle',  cls:'s-circle',      size:'sz-sm'},
+    {type:'quarter', cls:'s-quarter-br',  size:'sz-lg'},
+
+    {type:'circle',  cls:'s-circle',      size:'sz-xs'},
+    {type:'half',    cls:'s-half-down',   size:'sz-sm'},
+    {type:'quarter', cls:'s-quarter-tr',  size:'sz-sm'},
+  ],
+];
+
+// ── STATE ─────────────────────────────────────────────────────
+let currentSet   = 0;
+let currentColor = 'red';
+let eraser       = false;
+let shapeColors  = new Map();
+let isPerfect    = false;
+const TOTAL      = 15;
+
+// ── LOAD SET ──────────────────────────────────────────────────
+function loadSet(idx) {
+  currentSet = idx;
+  shapeColors.clear();
+  eraser = false;
+  document.getElementById('eraserBtn').classList.remove('active');
+
+  const grid = document.getElementById('shapeGrid');
+  grid.innerHTML = '';
+
+  SETS[idx].forEach((s, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+
+    const shape = document.createElement('div');
+    shape.className = `shape ${s.cls} ${s.size}`;
+    shape.dataset.type = s.type;
+    shape.dataset.idx  = i;
+    shape.style.background = EMPTY_BG;
+    shape.addEventListener('click', () => paint(shape));
+
+    cell.appendChild(shape);
+    grid.appendChild(cell);
+  });
+
+  buildSetDots();
+  updateProgress();
+}
+
+// ── SET DOTS ──────────────────────────────────────────────────
+function buildSetDots() {
+  const c = document.getElementById('setDots');
+  c.innerHTML = '';
+  SETS.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'set-dot' + (i < currentSet ? ' done' : i === currentSet ? ' current' : '');
+    c.appendChild(d);
+  });
+}
+
+// ── COLOUR CONTROLS ───────────────────────────────────────────
+function selectColor(el) {
+  eraser = false;
+  document.getElementById('eraserBtn').classList.remove('active');
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  currentColor = el.dataset.color;
+}
+
+function toggleEraser() {
+  eraser = !eraser;
+  document.getElementById('eraserBtn').classList.toggle('active', eraser);
+  if (eraser) document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ── PAINT ─────────────────────────────────────────────────────
+function paint(shape) {
+  shape.classList.remove('correct-flash','wrong-flash','empty-flash');
+  if (eraser) {
+    shape.style.background = EMPTY_BG;
+    shapeColors.delete(shape);
+  } else {
+    shape.style.background = FILL_COLOR[currentColor];
+    shapeColors.set(shape, currentColor);
+  }
+  shape.classList.remove('pop-anim');
+  void shape.offsetWidth;
+  shape.classList.add('pop-anim');
+  shape.addEventListener('animationend', () => shape.classList.remove('pop-anim'), {once:true});
+  updateProgress();
+}
+
+// ── PROGRESS ──────────────────────────────────────────────────
+function updateProgress() {
+  const n = shapeColors.size;
+  document.getElementById('progressCount').textContent = n + ' / ' + TOTAL;
+  document.getElementById('progressFill').style.width = ((n / TOTAL) * 100) + '%';
+}
+
+// ── CHECK ─────────────────────────────────────────────────────
+function checkAnswers() {
+  const shapes = document.querySelectorAll('.shape');
+  let correct=0, wrong=0, empty=0;
+
+  shapes.forEach(shape => {
+    shape.classList.remove('correct-flash','wrong-flash','empty-flash');
+    const type   = shape.dataset.type;
+    const chosen = shapeColors.get(shape);
+
+    if (!chosen) {
+      empty++;
+      shape.classList.add('empty-flash');
+    } else if (chosen === CORRECT_FOR[type]) {
+      correct++;
+      shape.classList.add('correct-flash');
+    } else {
+      wrong++;
+      shape.classList.add('wrong-flash');
+    }
+  });
+
+  isPerfect = correct === TOTAL;
+  showResult(correct, wrong, empty);
+}
+
+function showResult(correct, wrong, empty) {
+  const isLast = currentSet === SETS.length - 1;
+  const emoji  = document.getElementById('resEmoji');
+  const title  = document.getElementById('resTitle');
+  const score  = document.getElementById('resScore');
+  const msg    = document.getElementById('resMsg');
+  const btn    = document.getElementById('resPrimaryBtn');
+  const box    = document.getElementById('resultBox');
+
+  score.textContent = correct + ' / ' + TOTAL;
+
+  if (isPerfect) {
+    emoji.textContent = '🎉'; title.textContent = 'Perfect!';
+    title.style.color = '#ffd166'; score.style.color = '#ffd166';
+    box.style.borderColor = 'rgba(255,209,102,0.5)';
+    msg.textContent = isLast ? 'Amazing — you finished all 5 sets!' : 'All shapes correct! Ready for the next set?';
+    btn.textContent = isLast ? 'See Results!' : 'Next Set →';
+  } else if (empty === TOTAL) {
+    emoji.textContent = '🖌️'; title.textContent = 'Not started yet!';
+    title.style.color = '#ff9f40'; score.style.color = '#ff9f40';
+    box.style.borderColor = 'rgba(255,159,64,0.4)';
+    msg.textContent = 'Colour all the shapes first, then check!';
+    btn.textContent = 'OK, keep going';
+  } else {
+    const pct = Math.round((correct / TOTAL) * 100);
+    emoji.textContent = pct >= 70 ? '👏' : '💪';
+    title.textContent = pct >= 70 ? 'Great effort!' : 'Keep trying!';
+    title.style.color = pct >= 70 ? '#80e899' : '#ff9999';
+    score.style.color = pct >= 70 ? '#80e899' : '#ff9999';
+    box.style.borderColor = pct >= 70 ? 'rgba(80,200,112,0.4)' : 'rgba(220,60,60,0.4)';
+    const parts = [];
+    if (wrong > 0) parts.push(wrong + ' wrong colour' + (wrong>1?'s':''));
+    if (empty > 0) parts.push(empty + ' not filled');
+    msg.textContent = parts.join(' and ') + '. Fix the highlighted shapes!';
+    btn.textContent = 'OK, try again';
+  }
+
+  document.getElementById('resultOverlay').classList.add('show');
+}
+
+function handlePrimary() {
+  if (isPerfect) {
+    closeResult();
+    if (currentSet === SETS.length - 1) {
+      document.getElementById('allDoneOverlay').classList.add('show');
+    } else {
+      loadSet(currentSet + 1);
+    }
+  } else {
+    closeResult();
+  }
+}
+
+function closeResult() { document.getElementById('resultOverlay').classList.remove('show'); }
+
+function restartAll() {
+  document.getElementById('allDoneOverlay').classList.remove('show');
+  loadSet(0);
+}
+
+function resetAll() {
+  document.querySelectorAll('.shape').forEach(s => {
+    s.style.background = EMPTY_BG;
+    s.classList.remove('correct-flash','wrong-flash','empty-flash');
+  });
+  shapeColors.clear();
+  updateProgress();
+  closeResult();
+}
+
+// ── START ─────────────────────────────────────────────────────
+loadSet(0);
+</script>
+</body>
+</html>
